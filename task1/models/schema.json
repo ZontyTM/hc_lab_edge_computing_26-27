@@ -1,0 +1,11 @@
+{
+  "features": [
+    "temp",
+    "rpm",
+    "vib",
+    "current",
+    "voltage",
+    "pressure"
+  ],
+  "label": "label"
+}
