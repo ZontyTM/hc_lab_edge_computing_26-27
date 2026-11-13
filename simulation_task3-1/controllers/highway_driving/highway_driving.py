@@ -13,7 +13,7 @@ if __name__ == "__main__":
     driver.setSteeringAngle(0.0)  # go straight
 
     camera = driver.getDevice('camera')
-    camera.enable(50)
+    camera.enable(80)
     #camera.recognitionEnable(50)
     display = driver.getDevice("display")
 
@@ -62,23 +62,29 @@ if __name__ == "__main__":
         sx = np.abs(cv2.Sobel(enhanced, cv2.CV_64F, 1, 0, ksize=3))
         edges = np.uint8(255 * sx / (sx.max() + 1e-6))
         _, edges = cv2.threshold(edges, 15, 255, cv2.THRESH_BINARY)
+        hsv = cv2.cvtColor(bev, cv2.COLOR_BGR2HSV)
+        grass_mask = cv2.inRange(hsv, np.array([25, 40, 20]), np.array([95, 255, 255]))
+        grass_mask = cv2.dilate(grass_mask, np.ones((3, 3), np.uint8))
+        edges[grass_mask > 0] = 0
+        cv2.imshow("Detected edges", edges)
+        cv2.waitKey(1)
 
-        hough_lines = cv2.HoughLinesP(edges, rho=1, theta=np.pi / 180, threshold=90, minLineLength=40, maxLineGap=60)
+        lines = cv2.HoughLinesP(edges, rho=1, theta=np.pi / 180, threshold=90, minLineLength=40, maxLineGap=60)
         result = bev.copy()
-        lines = []
+        #lines = []
 
         def get_angle(line):
             x1, y1, x2, y2 = line[0]
             return np.degrees(np.arctan2(y2 - y1, x2 - x1))
 
-        result = bev.copy()
-        if hough_lines is not None:
+        result = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
+        '''if hough_lines is not None:
             for line in hough_lines:
                 angle = get_angle(line)
 
                 # Nur nahezu senkrechte Linien (+/- 5 Grad)
-                if abs(abs(angle) - 90) <= 20:
-                    lines.append(line)
+                if abs(abs(angle) - 90) <= 50:
+                    lines.append(line)'''
 
         vehicle_center_x = 127
         vehicle_reference_y = 126.0
@@ -127,16 +133,23 @@ if __name__ == "__main__":
         if left_lane_line is not None and right_lane_line is not None:
             lx1, ly1, lx2, ly2 = left_lane_line[0]
             rx1, ry1, rx2, ry2 = right_lane_line[0]
-            drive_lane_x_mid = lx1 + (rx1 - lx1) / 2
+            left_x_at_vehicle = np.polyfit([ly1, ly2], [lx1, lx2], 1)
+            right_x_at_vehicle = np.polyfit([ry1, ry2], [rx1, rx2], 1)
+            drive_lane_x_mid = (
+                np.polyval(left_x_at_vehicle, vehicle_reference_y)
+                + np.polyval(right_x_at_vehicle, vehicle_reference_y)
+            ) / 2
             lateral_offset = drive_lane_x_mid - vehicle_center_x
 
-            heading_error_degrees = (get_angle(left_lane_line) + get_angle(right_lane_line)) / 2
+            heading_error_degrees = (
+                (get_angle(left_lane_line) % 180 + get_angle(right_lane_line) % 180) / 2
+            )
             #heading_error_degrees = get_angle(right_lane_line)
             #print("PRE: ", heading_error_degrees)
             heading_error_degrees -= 90
             #print("POST: ", heading_error_degrees)
 
-            steering_gain_heading = 0.02
+            steering_gain_heading = 0.01
             steering_gain_lateral = 0.005
     
             steering_angle = (
