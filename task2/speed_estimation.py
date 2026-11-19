@@ -22,6 +22,7 @@ import cv2
 import cv2.aruco as aruco
 import numpy as np
 
+import json
 
 # ==================== PROVIDED HELPERS ====================
 
@@ -58,7 +59,11 @@ def load_marker_map(path: str) -> Tuple[float, Dict[int, Tuple[float, float]]]:
       marker_length (float)
       marker_map: dict[int] -> (x, y)
     """
-    raise NotImplementedError
+
+    with open(path, "r") as file:
+        data = json.load(file)
+
+    return data["marker_length_m"], data["markers"]
 
 
 # ==================== MAIN ====================
@@ -67,7 +72,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--camera", type=int, default=0)
     ap.add_argument("--calib", type=str, default="camera_calib.npz")
-    ap.add_argument("--marker-map", type=str, default="marker_map.json")
+    ap.add_argument("--marker-map", type=str, default="marker_map_0.json")
     args = ap.parse_args()
 
     cap = cv2.VideoCapture(args.camera)
@@ -81,8 +86,8 @@ def main():
     # TODO: Load calibration and marker map
     # ------------------------------------------------------------------
 
-    # camera_matrix, dist_coeffs = ...
-    # marker_length, marker_map = ...
+    #camera_matrix, dist_coeffs = load_camera_calibration(args.calib)
+    marker_length, marker_map = load_marker_map(args.marker_map)
 
     # ------------------------------------------------------------------
     # ArUco setup

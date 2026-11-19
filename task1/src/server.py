@@ -30,6 +30,8 @@ import torch
 from PIL import Image
 from torchvision import models, transforms
 
+import io
+
 DATA_MAGIC = b"DATA"
 IMGD_MAGIC = b"IMGD"
 RESU_MAGIC = b"RESU"
@@ -183,6 +185,12 @@ def main() -> None:
                 pass
 
             elif magic == IMGD_MAGIC:
+                metadata, img = parse_imgd(packet)
+                image = Image.open(io.BytesIO(img))
+                pred, confidence = infer_resnet18(img_model, device, image)
+                print(pred, confidence)
+                sock.sendto(json.dumps((pred, confidence)).encode(), addr)
+                
                 # TODO:
                 pass
 

@@ -46,6 +46,7 @@ def main():
     # -------------------------
     # TODO:
     # - load telemetry.jsonl
+    
     # - load schema.json
     # - load json_small.joblib
 

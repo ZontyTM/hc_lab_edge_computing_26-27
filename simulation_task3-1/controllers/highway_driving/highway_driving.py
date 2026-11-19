@@ -38,7 +38,7 @@ if __name__ == "__main__":
     while driver.step() != -1:
 
         driver.setSteeringAngle(0.0)
-        driver.setCruisingSpeed(20)
+        driver.setCruisingSpeed(30)
 
 
         image = camera.getImage()
@@ -86,7 +86,7 @@ if __name__ == "__main__":
                 if abs(abs(angle) - 90) <= 50:
                     lines.append(line)'''
 
-        vehicle_center_x = 127
+        vehicle_center_x = 117
         vehicle_reference_y = 126.0
 
         left_lane_line = None
@@ -149,7 +149,7 @@ if __name__ == "__main__":
             heading_error_degrees -= 90
             #print("POST: ", heading_error_degrees)
 
-            steering_gain_heading = 0.01
+            steering_gain_heading = 0.005
             steering_gain_lateral = 0.005
     
             steering_angle = (

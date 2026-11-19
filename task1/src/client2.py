@@ -37,7 +37,6 @@ import torch
 from PIL import Image
 from torchvision import models, transforms
 
-
 # -------------------------
 # GIVEN: model + preprocessing
 # -------------------------
@@ -76,8 +75,24 @@ def local_infer(model, device: str, pil_img: Image.Image) -> Tuple[int, float]:
     -Return prediction + confidence
    
     """
-    raise NotImplementedError
 
+    # Preprocess the image
+    x = PREPROCESS(pil_img).unsqueeze(0).to(device)
+
+    # Run the model
+    logits = model(x).squeeze(0)
+
+    # Convert logits → probabilities
+    probs = torch.softmax(logits, dim=0)
+
+    # Return prediction + confidence
+    # print(probs)
+
+    pred = int(torch.argmax(probs))
+    confidence = float(torch.max(probs))
+    print('pred', pred, probs[pred], confidence)
+
+    return pred, confidence
 
 def jpeg_for_udp(pil_img: Image.Image, quality: int = 75) -> bytes:
     """
@@ -146,6 +161,7 @@ def main():
     if not images:
         raise ValueError(f"No images found in: {img_dir}")
 
+    
     # Load model 
     device = get_device()
     model = load_local_model(device)
@@ -153,54 +169,92 @@ def main():
     # --------------
     # Measurements 
     # --------------
-    # TODO:
-    # - total_samples counter
-    # - offloaded_samples counter
-    # - sent_bytes_total / received_bytes_total
-    # - store local inference latencies 
+    cnt = 0
+    local_image_cnt = 0
+    offload_image_count = 0
+    sent_bytes_total = 0
+    received_bytes_total = 0
+    local_latencies_ms = []
+    offload_latencies_ms = []
+    print(args.num_samples)
 
-    start_time = time.perf_counter()
+    experiment_start = time.perf_counter()
 
     for seq in range(1, args.num_samples + 1):
         img_path = images[(seq - 1) % len(images)]
         pil_img = Image.open(img_path).convert("RGB")
 
         # 1) Local inference timing
-        # TODO: # Measure how long local inference takes 
+        inference_start = time.perf_counter()
+        pred, confidence = local_infer(model, device, pil_img)
+        total_local_time = (time.perf_counter() - inference_start) * 1000
+        print('total time', total_local_time)
 
+        cnt += 1
+        
         # 2) HI decision
         # TODO:
-        decision = None  # placeholder
+        decision = "LOCAL" if confidence >= args.tau else "OFFLOAD"
+        print(decision)
         
         if decision == "LOCAL":
             # TODO:
             # - count as local
+            local_image_cnt += 1
+
+            print(pred, confidence)
+
             # - record local_ms
+            print('total local time', total_local_time)
+            local_latencies_ms.append(total_local_time)
             # - do nothing else (no network)
-            pass
 
         elif decision == "OFFLOAD":
             # TODO:
+
+            offload_start = time.perf_counter()
             # - count as offload
+            offload_image_count += 1
+
             # - build OFFLOAD packet (e.g., JPEG + metadata)
+            img = jpeg_for_udp(pil_img, args.jpeg_quality)
+            packed_img = pack_imgd({}, img)
+
             # - send packet via UDP
-            # - measure offload latency if you wait for server reply
-            pass
+            sock.connect(server_addr)
+            sent_bytes_total += sock.send(packed_img)
+
+            data, address = sock.recvfrom(1024)
+            received_bytes_total += len(data)
+            pred, confidence = tuple(json.loads(data.decode()))
+            print(pred, confidence)
+
+            offload_latency = (time.perf_counter() - offload_start) * 1000
+            offload_latencies_ms.append(offload_latency)
+            print('offload time', offload_latency)
 
         else:
             raise RuntimeError("Invalid decision")
 
         time.sleep(args.period)
 
-    runtime_s = time.perf_counter() - start_time
+    runtime_s = time.perf_counter() - experiment_start
 
     # -------------------------
     # Final report 
     # -------------------------
-    # TODO:
-    # - offload_rate 
-    # - traffic
-    # - latency
+    offload_rate = 100 * offload_image_count / cnt if cnt else 0.0
+    total_bytes = sent_bytes_total + received_bytes_total
+    traffic_bytes_per_sec = total_bytes / runtime_s if runtime_s else 0.0
+    local_latency = 0 if local_image_cnt == 0 else sum(local_latencies_ms) / len(local_latencies_ms)
+    offload_latency = 0 if offload_image_count == 0 else sum(offload_latencies_ms) / len(offload_latencies_ms)
+
+    print(f"\nEvaluation:")
+    print(f"offload rate: {offload_rate:.2f}%")
+    print(f"network traffic: {traffic_bytes_per_sec:.2f} bytes/sec")
+    print(f"latency:")
+    print(f"    local: {local_latency:.2f} ms")
+    print(f"    offload: {offload_latency:.2f} ms")
 
 
 
